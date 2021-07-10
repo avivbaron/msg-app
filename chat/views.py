@@ -8,7 +8,7 @@ from .forms import SignUpForm
 import json
 
 @csrf_exempt
-def login(request):
+def do_login(request):
     if request.user.is_authenticated:
         return HttpResponse('{"user is connected"}')
     if request.method == "POST":
@@ -24,6 +24,7 @@ def login(request):
 def register_view(request):
     if request.method == 'POST':
         form = SignUpForm(request.POST)
+
         if form.is_valid():
             user = form.save(commit=False)
             username = form.cleaned_data['username']

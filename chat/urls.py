@@ -4,7 +4,7 @@ from django.contrib.auth.views import LogoutView
 
 
 urlpatterns = [
-    path('', login, name='login'),
+    path('', do_login, name='login'),
     path('api/messages/<int:user_id>/', get_all_messages, name='get-all-messages'),
     path('api/messages/single/<int:message_id>/', get_signle_message, name='get-single-message'),
     path('api/messages/unread/<int:user_id>/', get_all_unread_message, name='get-all-unread-message'),
