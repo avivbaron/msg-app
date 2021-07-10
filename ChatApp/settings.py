@@ -25,7 +25,7 @@ SECRET_KEY = '#nv&7=my(8drxahj9-1-_rdmvy8n)$#cdzg0ty1$-aa=unw+$4'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['https://whispering-eyrie-10695.herokuapp.com/', '127.0.0.1']
 
 
 # Application definition
