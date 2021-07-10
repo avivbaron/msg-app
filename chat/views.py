@@ -102,22 +102,21 @@ def send_message(request):
         sender = User.objects.filter(username=data['sender']).first()
         msg = Message(receiver=receiver, sender=sender, message=data['message'])
         msg.save()
-        return HttpResponse({"messages"})
+        return HttpResponse({'message sent'} )
 
 
 @csrf_exempt
 def message_delete(request, message_id, user_id):
      if request.method == 'DELETE':
-        message = Message.objects.filter(id=message_id)
-        receiver = list(Message.objects.filter(id=message_id).values_list('receiver_id', flat=True))
-        receiver = receiver[0]
-        sender = list(Message.objects.filter(id=message_id).values_list('sender_id', flat=True))
-        sender = sender[0]
+        try:
+            message = Message.objects.get(id=message_id)
+        except Message.DoesNotExist:
+            return HttpResponse({"message_id was not found"})
 
-        if user_id == receiver or user_id == sender:
-           message.delete()
-           return HttpResponse({"message has deleted"})
-        return HttpResponse({"message has not been deleted"})
+        if user_id in [message.receiver_id, message.sender_id]:
+            message.delete()
+            return HttpResponse({"message has deleted"})
+        return HttpResponse({"message has not been deleted due to user_id mismatch"})
 
 
 
