@@ -1,139 +1,140 @@
-from django.contrib.auth import authenticate, login
-from django.http.response import HttpResponse
+import re
 from django.contrib.auth.models import User
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.parsers import JSONParser
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from chat.serializers import MessageSerializer, UserSerializerWithToken
 from .models import Message
-from .forms import SignUpForm
-import json
+from django.contrib.auth.hashers import make_password
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 
-@csrf_exempt
-def do_login(request):
+class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
 
-    if request.user.is_authenticated:
-        return HttpResponse('{"user is connected"}')
+        serializer = UserSerializerWithToken(self.user).data
 
-    if request.method == "POST":
-        username, password = request.POST['username'], request.POST['password']
-        user = authenticate(username=username, password=password)
+        for k, v in serializer.items():
+            data[k] = v
 
-        if user is not None:
-            login(request, user)
-        else:
-            return HttpResponse('{"error": "User does not exist"}')
-        return HttpResponse('{"user is connected"}')
+        return data
+
+class MyTokenObtainPairView(TokenObtainPairView):
+    serializer_class = MyTokenObtainPairSerializer
 
 
-@csrf_exempt
+
+@api_view(['POST'])
 def register_view(request):
 
-    if request.method == 'POST':
-        form = SignUpForm(request.POST)
+    data = request.data
 
-        if form.is_valid():
-            user = form.save(commit=False)
-            username = form.cleaned_data['username']
-            password = form.cleaned_data['password1']
-            
-            user.set_password(password)
-            user.save()
-            user = authenticate(username=username, password=password)
+    try:
+        user = User.objects.create(
+            username = data['username'],
+            email = data['email'],
+            password = make_password(data['password'])
+        )
+        serializer = UserSerializerWithToken(user, many=False)
 
-            if user is not None:
-                if user.is_active:
-                    login(request, user)
-                    return HttpResponse('{"registered"}')
+        return Response(serializer.data)
 
-    return HttpResponse('{"not registered"}')
+    except:
+        message = {"User with this email already exists"}
+        return Response(message, status=status.HTTP_400_BAD_REQUEST)
 
 
-@csrf_exempt
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_all_messages(request, user_id):
 
-    if request.method == 'GET':
+    if user_id == request.user.id:
         if user_id is None:
-            return HttpResponse('user_id is not specified')
+            return Response('user_id is not specified')
 
-        messages = (Message.objects.filter(receiver_id=user_id) | Message.objects.filter(sender_id=user_id))
-        response_json = {}
+        messages = (Message.objects.filter(reciever_id=user_id) | Message.objects.filter(sender_id=user_id))
+        serializer = MessageSerializer(messages, many=True, context={'request': request})
 
         for message in messages:
             message.is_read = True
             message.save()
-            response_json[message.id] = {
-                'receiver_id': message.receiver_id,
-                'sender_id': message.sender_id,
-                'message_content': message.message,
-            }
 
-        return HttpResponse(json.dumps(response_json), content_type="application/json")
+        return Response(serializer.data)
+
+    else:
+        return Response({"You are not allowed to access"})
 
 
-@csrf_exempt
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_signle_message(request, message_id):
+    
+    try:
+        message = Message.objects.get(id=message_id)
+    except Message.DoesNotExist:
+        return Response({"message_id is not valid"})
 
-    if request.method == 'GET':
-        try:
-            message = Message.objects.get(id=message_id)
-        except Message.DoesNotExist:
-            return HttpResponse({"message_id is not valid"})
+    serializer = MessageSerializer(message, many=False, context={'request': request})
 
-        response_json = {
-            'receiver_id': message.receiver_id,
-            'receiver': message.receiver.username,
-            'sender_id': message.sender_id,
-            'sender': message.sender.username,
-            'message_content': message.message,
-        }
-        return HttpResponse(json.dumps(response_json), content_type='application/json')
-    return HttpResponse({"message error"})
+    return Response(serializer.data)
 
 
-@csrf_exempt
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_all_unread_message(request, user_id):
-
-    if request.method == 'GET':
-        messages = Message.objects.filter(receiver_id=user_id, is_read = False)
-        response_json = {}
+    if user_id == request.user.id:
+        messages = Message.objects.filter(reciever_id=user_id, is_read = False)
+        serializer = MessageSerializer(messages, many=True, context={'request': request})
 
         for message in messages:
            message.is_read = True
            message.save()
-           response_json[message.id] = {
-               'receiver_id': message.receiver_id,
-               'sender_id': message.sender_id,
-               'message_content': message.message,
-           }
-        return HttpResponse(json.dumps(response_json), content_type="application/json")
+
+        return Response(serializer.data)
+
+    else:
+        return Response({"You are not allowed to access"})
     
 
-@csrf_exempt
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def send_message(request):  
 
-    if request.method == 'POST':
-        data = JSONParser().parse(request)
-        receiver = User.objects.filter(username=data['receiver']).first()
-        sender = User.objects.filter(username=data['sender']).first()
-        msg = Message(receiver=receiver, sender=sender, message=data['message'])
-        msg.save()
-        return HttpResponse({'message sent'} )
+    serializer = MessageSerializer(data=request.data)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+
+    return Response(serializer.errors, status=400)
 
 
-@csrf_exempt
-def message_delete(request, message_id, user_id):
 
-     if request.method == 'DELETE':
-        try:
-            message = Message.objects.get(id=message_id)
-        except Message.DoesNotExist:
-            return HttpResponse({"message_id was not found"})
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def message_delete(request, message_id):
+    try:
+        message = Message.objects.get(id=message_id)
 
-        if user_id in [message.receiver_id, message.sender_id]:
-            message.delete()
-            return HttpResponse({"message has deleted"})
+    except Message.DoesNotExist:
+        return Response({"message_id was not found"})
 
-        return HttpResponse({"message has not been deleted due to user_id mismatch"})
+    if request.user.id in [message.reciever_id, message.sender_id]:
+ 
+        message.delete()
+        return Response({'message had deleted'})
+
+    else:
+        return Response({"You are not allowed to delete this message"})
 
 
 
