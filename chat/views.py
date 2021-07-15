@@ -1,4 +1,3 @@
-import re
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -11,8 +10,10 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 
+# Define the data the token will show
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
+
         data = super().validate(attrs)
 
         serializer = UserSerializerWithToken(self.user).data
@@ -81,15 +82,19 @@ def get_signle_message(request, message_id):
     except Message.DoesNotExist:
         return Response({"message_id is not valid"})
 
-    serializer = MessageSerializer(message, many=False, context={'request': request})
+    if request.user.id in [message.reciever_id, message.sender_id]:
+        serializer = MessageSerializer(message, many=False, context={'request': request})
+        return Response(serializer.data)
 
-    return Response(serializer.data)
+    else:
+        return Response({"You are not allowed to access"})    
 
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_all_unread_message(request, user_id):
+
     if user_id == request.user.id:
         messages = Message.objects.filter(reciever_id=user_id, is_read = False)
         serializer = MessageSerializer(messages, many=True, context={'request': request})
@@ -111,9 +116,10 @@ def send_message(request):
 
     serializer = MessageSerializer(data=request.data)
 
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=201)
+    if request.data.sender_id == request.user.id:
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
 
     return Response(serializer.errors, status=400)
 
@@ -122,6 +128,7 @@ def send_message(request):
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def message_delete(request, message_id):
+    
     try:
         message = Message.objects.get(id=message_id)
 
