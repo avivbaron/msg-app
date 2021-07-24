@@ -5,29 +5,22 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 
 class UserSerializer(serializers.ModelSerializer):
-
-    name = serializers.SerializerMethodField(read_only=True)
-    _id = serializers.SerializerMethodField(read_only=True)
-    isAdmin = serializers.SerializerMethodField(read_only=True)
-
-
     password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
-        fields = ['username', 'password']
+        fields = ['username', 'password', 'is_staff']
 
-    def get_isAdmin(self, obj):
-        return obj.is_staff
+    # def get_isAdmin(self, obj):
+    #     return obj.is_staff
 
 
 class UserSerializerWithToken(UserSerializer):
-
     token =  serializers.SerializerMethodField(read_only=True)
-
+    
     class Meta:
         model = User
-        fields = ['id','username','email','isAdmin' ,'token']
+        fields = ['id','username','email','is_staff' ,'token']
     
     def get_token(self, obj):
         token = RefreshToken.for_user(obj)
@@ -35,7 +28,6 @@ class UserSerializerWithToken(UserSerializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
-    
     sender = serializers.SlugRelatedField(many=False, slug_field='username', queryset=User.objects.all())
     reciever = serializers.SlugRelatedField(many=False, slug_field='username', queryset=User.objects.all())
 
